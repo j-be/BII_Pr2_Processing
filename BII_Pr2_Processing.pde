@@ -1,4 +1,5 @@
 import processing.serial.*;
+import java.util.Hashtable;
 
 int serialBaudrate = 115200;
 Serial serialPort;
@@ -19,12 +20,22 @@ int light = 0;
 float humidity = 0f;
 float pressure = 0f;
 float temperature = 0f;
+boolean motionDetected = false;
+String lastReadTag = "";
+Hashtable rfidTags = new Hashtable();
 
 void setup() {
-  size(800, 800); frameRate(24);
+  size(650, 450); frameRate(24);
   //println(Serial.list());
  serialPort = new Serial(this, Serial.list()[0], 112500);
  serialPort.bufferUntil('\n');
+ serialPort.clear();
+
+ // RFID IDs
+ rfidTags.put("24849484853684869665769663", "Blue Tag");
+ rfidTags.put("24849484848535251535649703", "Red Tag");
+ rfidTags.put("25270484854536768656552683", "Card 52650");
+ rfidTags.put("25270484854495654575251673", "Card 34452");
 }
 
 void initCanvas() {
@@ -43,8 +54,7 @@ void drawButton() {
     rect(25, 115, 100, 10);
   else
     rect(25, 75, 100, 50);
-  drawCaption(25, 125, "Button");  
-  
+  drawCaption(25, 125, "Button");
 }
 
 void drawBar(int x, int y, int barHeight, int r, int g, int b, String caption) {
@@ -56,6 +66,7 @@ void drawBar(int x, int y, int barHeight, int r, int g, int b, String caption) {
 void drawLight() {
   int barHeight = int(light / 10f);
   drawBar(150, 125, barHeight, 0, 255, 0, "Light");
+  drawCaption(150, 150, "" + light);
 }
 
 void drawHumPresTemp() {
@@ -63,8 +74,34 @@ void drawHumPresTemp() {
   int tempBarHeight = int(temperature * 2);
   int pressBarHeight = int((pressure - PRESSURE_MIN) / PRESSURE_RANGE * 100);
   drawBar(275, 125, humBarHeight, 0, 0, 255, "Hum.");
+  drawCaption(275, 150, "" + humidity + "%");
   drawBar(375, 125, tempBarHeight, 255, 0, 0, "Temp.");
+  drawCaption(375, 150, "" + temperature + "°C");
   drawBar(475, 125, pressBarHeight, 255, 255, 0, "Press.");
+  drawCaption(475, 150, "" + pressure + "hPa");
+}
+
+void drawMotionSensor() {
+  if (motionDetected)
+    fill(255, 0, 0);
+  else
+    fill(192);
+
+  ellipse(75, 275, 100, 100);
+  fill(32);
+  drawCaption(25, 325, "Motion");
+
+  // Send command for LED to Arduino
+  serialPort.write("l\t");
+  if (motionDetected)
+    serialPort.write("1");
+  else
+    serialPort.write("0");
+  serialPort.write("\n");
+}
+
+void drawLastRfidTagId() {
+  drawCaption(20, 400, "Last tag: " + lastReadTag);
 }
 
 void draw() {
@@ -73,6 +110,8 @@ void draw() {
   drawButton();
   drawLight();
   drawHumPresTemp();
+  drawMotionSensor();
+  drawLastRfidTagId();
 }
 
 void serialEvent (Serial serialPort) {
@@ -91,14 +130,15 @@ void serialEvent (Serial serialPort) {
     } else
       return;
    
-   if (dataType == null || dataType.length() == 0)
+   if (dataType == null || dataType.isEmpty())
      return;
  
-    switch (messageParts[0].charAt(0)) {
+    switch (dataType.charAt(0)) {
       case 'b':
-        if (value.charAt(0) == '0')
+        if ("0".equals(value)) {
           buttonPressed = true;
-        else
+          lastReadTag = "";
+        } else
           buttonPressed = false;
         break;
       case 'l':
@@ -121,9 +161,15 @@ void serialEvent (Serial serialPort) {
           temperature = Float.parseFloat(value);
         } catch (NumberFormatException nfe) {}
         break;
+      case 'm':
+        motionDetected = "1".equals(value);
+        break;
+      case 'r':
+        if (!"no".equals(value))
+          lastReadTag = rfidTags.get(value).toString();
+        break;
       default:
-        println("ERROR: Cannot understand message '" + message + "'!");
+        break;
     }
   }
 }
-    
