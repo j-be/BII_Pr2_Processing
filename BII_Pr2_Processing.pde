@@ -118,6 +118,7 @@ void serialEvent (Serial serialPort) {
   String[] messageParts = null;
   String dataType = null;
   String value = null;
+  Object currentTag = null;
   String message = serialPort.readStringUntil('\n');
 
   if (message != null) {
@@ -165,8 +166,13 @@ void serialEvent (Serial serialPort) {
         motionDetected = "1".equals(value);
         break;
       case 'r':
-        if (!"no".equals(value))
-          lastReadTag = rfidTags.get(value).toString();
+        if (!"no".equals(value)) {
+          currentTag = rfidTags.get(value);
+          if (currentTag != null)
+            lastReadTag = currentTag.toString();
+          else
+            lastReadTag = "unknown tag: " + value;
+        }
         break;
       default:
         break;
